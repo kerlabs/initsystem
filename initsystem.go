@@ -9,12 +9,12 @@ import (
 type InitSystem interface {
 	Start(service string) error
 	Stop(service string) error
+	Restart(service string) error
 	Enable(service string) error
 	Disable(service string) error
 	IsActive(service string) (bool, error)
 	IsEnabled(service string) (bool, error)
-	EnableAndStartService(service string) error
-	DisableAndStopService(service string) error
+	IsExists(service string) (bool, error)
 }
 
 // GetInitSystem returns an InitSystem for the current system, or error

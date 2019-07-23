@@ -3,6 +3,7 @@ package initsystem
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 type SystemdInitSystem struct{}
@@ -21,10 +22,7 @@ func (s SystemdInitSystem) Start(service string) error {
 		return err
 	}
 	args := []string{"start", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		return fmt.Errorf("failed to start service: %v", err)
-	}
-	return nil
+	return exec.Command("systemctl", args...).Run()
 }
 
 // Stop a service
@@ -34,10 +32,16 @@ func (s SystemdInitSystem) Stop(service string) error {
 		return err
 	}
 	args := []string{"stop", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		return fmt.Errorf("failed to stop service: %v", err)
+	return exec.Command("systemctl", args...).Run()
+}
+
+func (s SystemdInitSystem) Restart(service string) error {
+	// Before we try to start any service, make sure that systemd is ready
+	if err := s.reloadSystemd(); err != nil {
+		return err
 	}
-	return nil
+	args := []string{"restart", service}
+	return exec.Command("systemctl", args...).Run()
 }
 
 // Enable a service
@@ -47,10 +51,7 @@ func (s SystemdInitSystem) Enable(service string) error {
 		return err
 	}
 	args := []string{"enable", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		return fmt.Errorf("failed to enable service: %v", err)
-	}
-	return nil
+	return exec.Command("systemctl", args...).Run()
 }
 
 // Disable a service
@@ -60,56 +61,46 @@ func (s SystemdInitSystem) Disable(service string) error {
 		return err
 	}
 	args := []string{"disable", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		return fmt.Errorf("failed to disable service: %v", err)
-	}
-	return nil
-}
-
-// EnableAndStartService enables and starts the etcd service
-func (s SystemdInitSystem) EnableAndStartService(service string) error {
-	if err := s.Enable(service); err != nil {
-		return err
-	}
-	return s.Start(service)
-}
-
-// DisableAndStopService disables and stops the etcd service
-func (s SystemdInitSystem) DisableAndStopService(service string) error {
-	if err := s.Disable(service); err != nil {
-		return err
-	}
-	return s.Stop(service)
+	return exec.Command("systemctl", args...).Run()
 }
 
 // IsActive checks if the systemd unit is active
 func (s SystemdInitSystem) IsActive(service string) (bool, error) {
 	args := []string{"is-active", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		switch v := err.(type) {
-		case *exec.Error:
-			return false, fmt.Errorf("failed to run command %q: %s", v.Name, v.Err)
-		case *exec.ExitError:
-			return false, nil
-		default:
-			return false, err
-		}
+	outBytes, err := exec.Command("systemctl", args...).Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to run command: %s", err)
 	}
-	return true, nil
+	out := strings.TrimSpace(string(outBytes))
+	if out == "active" || out == "activating" {
+		return true, nil
+	}
+	return false, nil
 }
 
 // IsEnabled checks if the systemd unit is enabled
 func (s SystemdInitSystem) IsEnabled(service string) (bool, error) {
 	args := []string{"is-enabled", service}
-	if err := exec.Command("systemctl", args...).Run(); err != nil {
-		switch v := err.(type) {
-		case *exec.Error:
-			return false, fmt.Errorf("failed to run command %q: %s", v.Name, v.Err)
-		case *exec.ExitError:
-			return false, nil
-		default:
-			return false, err
-		}
+	outBytes, err := exec.Command("systemctl", args...).Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to run command: %s", err)
+	}
+	out := strings.TrimSpace(string(outBytes))
+	if out == "enabled" {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s SystemdInitSystem) IsExists(service string) (bool, error) {
+	args := []string{"status", service}
+	outBytes, err := exec.Command("systemctl", args...).Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to run command: %s", err)
+	}
+	out := strings.TrimSpace(string(outBytes))
+	if strings.Contains(out, "could not be found") || strings.Contains(out, "Loaded: not-found") {
+		return false, nil
 	}
 	return true, nil
 }
